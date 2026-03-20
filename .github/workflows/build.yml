@@ -85,7 +85,7 @@ jobs:
       - name: Apply device config and configure
         run: |
           cp defconfig/${{ env.CONFIG_FILE }} .config
-          yes "" | make olddefconfig
+          yes | make olddefconfig
 
       - name: Build firmware
         run: |
