@@ -84,7 +84,8 @@ jobs:
 
       - name: Configure build
         run: |
-          make defconfig
+          cp defconfig/${{ env.CONFIG_FILE }} .config
+          make olddefconfig
 
       - name: Build firmware
         run: |
