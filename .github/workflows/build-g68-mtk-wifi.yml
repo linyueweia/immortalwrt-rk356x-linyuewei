@@ -1,0 +1,124 @@
+name: Build G68 MTK WiFi Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      threads:
+        description: '编译线程数'
+        required: false
+        default: '8'
+        type: string
+      make_args:
+        description: '额外编译参数 (如 -j1 V=s)'
+        required: false
+        default: ''
+        type: string
+
+env:
+  DEVICE: g68-mtk-wifi
+  CONFIG_FILE: g68_mtk_wifi.config
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: linyueweia/immortalwrt-rk356x-linyuewei
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            flex \
+            bison \
+            g++ \
+            gperf \
+            cmake \
+            ninja-build \
+            libelf-dev \
+            libssl-dev \
+            zlib1g-dev \
+            libgmp-dev \
+            libmpc-dev \
+            libmpfr-dev \
+            gettext \
+            autopoint \
+            pkg-config \
+            zip \
+            unzip \
+            python3 \
+            python3-pip \
+            rsync \
+            time \
+            ccache \
+            git \
+            subversion
+          sudo pip3 install pyelftools
+
+      - name: Cache ccached
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccached-${{ env.DEVICE }}-${{ github.run_id }}
+          restore-keys: |
+            ccached-${{ env.DEVICE }}-
+
+      - name: Initialize submodules
+        run: |
+          git submodule update --init --recursive
+
+      - name: Apply device config
+        run: |
+          cp defconfig/${{ env.CONFIG_FILE }} .config
+
+      - name: Prepare feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Configure build
+        run: |
+          make defconfig
+
+      - name: Build firmware
+        run: |
+          if [ -n "${{ github.event.inputs.make_args }}" ]; then
+            make ${{ github.event.inputs.make_args }} V=s
+          else
+            make -j${{ github.event.inputs.threads || '8' }} V=s
+          fi
+
+      - name: Generate build info
+        run: |
+          echo "Build completed at: $(date)" > build_info.txt
+          echo "Device: ${{ env.DEVICE }}" >> build_info.txt
+          echo "Commit: $(git rev-parse HEAD)" >> build_info.txt
+          echo "Commit message: $(git log -1 --format='%s')" >> build_info.txt
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-g68-mtk-wifi-firmware
+          path: |
+            bin/targets/rockchip/armv8/**/*.img.gz
+            bin/targets/rockchip/armv8/**/*.tar.gz
+            build_info.txt
+          retention-days: 14
+          compression-level: 9
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: g68-mtk-wifi-build-logs
+          path: |
+            logs/
+            .config*
+          retention-days: 7
