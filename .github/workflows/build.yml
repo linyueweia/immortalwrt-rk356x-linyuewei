@@ -81,120 +81,7 @@ jobs:
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-
-      - name: Verify required packages
-        run: |
-          echo "=== 1. 验证关键插件包 ==="
-          
-          # 定义需要验证的关键包
-          REQUIRED_PACKAGES=(
-            "luci-app-dockerman"
-            "luci-app-diskman"
-            "luci-theme-argon"
-            "luci-app-smartdns"
-            "luci-app-upnp"
-            "luci-app-zerotier"
-            "docker"
-            "dockerd"
-            "docker-compose"
-          )
-          
-          MISSING_PACKAGES=""
-          MISSING_COUNT=0
-          
-          for pkg in "${REQUIRED_PACKAGES[@]}"; do
-            if grep -q "CONFIG_PACKAGE_${pkg}=y" .config; then
-              echo "✅ $pkg"
-            else
-              echo "❌ $pkg (配置中未启用 - 严重问题!)"
-              MISSING_PACKAGES="$MISSING_PACKAGES $pkg"
-              MISSING_COUNT=$((MISSING_COUNT + 1))
-            fi
-          done
-          
-          echo ""
-          echo "=== 2. 检查 feeds 中是否有缺失的包 ==="
-          
-          # 检查关键包在 feeds 中是否存在
-          for pkg in "${REQUIRED_PACKAGES[@]}"; do
-            if ./scripts/feeds search "$pkg" 2>/dev/null | grep -q "$pkg" || \
-               [ -d "package/feeds/luci/$pkg" ] || \
-               [ -d "package/feeds/packages/$pkg" ]; then
-              echo "✅ $pkg (feeds 中存在)"
-            else
-              echo "❌ $pkg (feeds 中缺失，可能需要添加自定义源)"
-            fi
-          done
-          
-          echo ""
-          echo "=== 3. 检查 feeds 初始化状态 ==="
-          
-          # 检查 feeds 是否正确初始化
-          FEEDS_STATUS=0
-          
-          if [ -d "package/feeds/luci" ]; then
-            LUCI_COUNT=$(find package/feeds/luci -maxdepth 1 -type d | wc -l)
-            echo "✅ luci feed 已初始化 ($LUCI_COUNT 个包)"
-          else
-            echo "❌ luci feed 未初始化!"
-            FEEDS_STATUS=1
-          fi
-          
-          if [ -d "package/feeds/packages" ]; then
-            PKG_COUNT=$(find package/feeds/packages -maxdepth 1 -type d | wc -l)
-            echo "✅ packages feed 已初始化 ($PKG_COUNT 个包)"
-          else
-            echo "❌ packages feed 未初始化!"
-            FEEDS_STATUS=1
-          fi
-          
-          if [ -d "package/feeds/routing" ]; then
-            echo "✅ routing feed 已初始化"
-          fi
-          
-          if [ -d "package/feeds/telephony" ]; then
-            echo "✅ telephony feed 已初始化"
-          fi
-          
-          echo ""
-          echo "=== 4. 备份关键配置 ==="
-          
-          # 备份关键配置项，用于后续验证
-          mkdir -p build_cache
-          
-          for pkg in "${REQUIRED_PACKAGES[@]}"; do
-            if grep -q "CONFIG_PACKAGE_${pkg}=y" .config; then
-              echo "$pkg=1" >> build_cache/required_packages.txt
-            fi
-          done
-          
-          echo "✅ 关键配置已备份到 build_cache/required_packages.txt"
-          cat build_cache/required_packages.txt
-          
-          echo ""
-          echo "=== 5. 检查固件大小预估 ==="
-          echo "配置文件: ${{ env.CONFIG_FILE }}"
-          echo "目标设备: ${{ env.DEVICE }}"
-          
-          # 统计启用的包数量
-          ENABLED_PACKAGES=$(grep -c "=y$" .config 2>/dev/null || echo "0")
-          echo "已启用配置项: $ENABLED_PACKAGES"
-          
-          # 检查 Docker 相关包
-          DOCKER_COUNT=$(grep -c "CONFIG_PACKAGE_docker" .config 2>/dev/null | grep -v "is not set" || echo "0")
-          echo "Docker 相关包: $DOCKER_COUNT 个"
-          
-          echo ""
-          echo "=== 6. 验证结果汇总 ==="
-          
-          if [ $MISSING_COUNT -gt 0 ] || [ $FEEDS_STATUS -eq 1 ]; then
-            echo "⚠️  警告: 发现 $MISSING_COUNT 个缺失包或 feeds 问题"
-            echo "请检查上述输出并确保配置文件正确"
-            # 不在这里失败，让 make olddefconfig 自动补全依赖
-            echo "继续执行编译，make olddefconfig 将尝试自动补全依赖..."
-          else
-            echo "✅ 所有验证通过!"
-          fi
+          echo "✅ feeds 更新完成"
 
       - name: Configure build
         run: |
@@ -212,36 +99,54 @@ jobs:
           echo ""
           echo "=== 验证关键包是否被保留 ==="
           
-          if [ -f build_cache/required_packages.txt ]; then
-            RESTORED_COUNT=0
-            LOST_COUNT=0
-            LOST_PACKAGES=""
-            
-            while IFS='=' read -r pkg status; do
-              if grep -q "CONFIG_PACKAGE_${pkg}=y" .config; then
-                echo "✅ $pkg (已保留)"
-                RESTORED_COUNT=$((RESTORED_COUNT + 1))
-              else
-                echo "❌ $pkg (丢失! 正在恢复...)"
-                # 恢复丢失的包配置
-                sed -i "s/# CONFIG_PACKAGE_${pkg} is not set/CONFIG_PACKAGE_${pkg}=y/" .config
-                LOST_COUNT=$((LOST_COUNT + 1))
-                LOST_PACKAGES="$LOST_PACKAGES $pkg"
+          # 定义需要验证的关键包
+          REQUIRED_PACKAGES=(
+            "luci-app-dockerman"
+            "luci-app-diskman"
+            "luci-theme-argon"
+            "luci-app-smartdns"
+            "luci-app-upnp"
+            "luci-app-zerotier"
+            "docker"
+            "dockerd"
+            "docker-compose"
+          )
+          
+          # 备份关键配置
+          mkdir -p build_cache
+          > build_cache/required_packages.txt
+          
+          RESTORED_COUNT=0
+          LOST_COUNT=0
+          LOST_PACKAGES=""
+          
+          for pkg in "${REQUIRED_PACKAGES[@]}"; do
+            if grep -q "CONFIG_PACKAGE_${pkg}=y" .config; then
+              echo "✅ $pkg (已保留)"
+              echo "$pkg=1" >> build_cache/required_packages.txt
+              RESTORED_COUNT=$((RESTORED_COUNT + 1))
+            else
+              echo "❌ $pkg (丢失! 正在恢复...)"
+              # 恢复丢失的包配置
+              sed -i "s/# CONFIG_PACKAGE_${pkg} is not set/CONFIG_PACKAGE_${pkg}=y/" .config 2>/dev/null || true
+              # 如果之前没有这个配置行，追加到文件末尾
+              if ! grep -q "CONFIG_PACKAGE_${pkg}=" .config; then
+                echo "CONFIG_PACKAGE_${pkg}=y" >> .config
               fi
-            done < build_cache/required_packages.txt
-            
-            echo ""
-            echo "=== 恢复结果 ==="
-            echo "保留成功: $RESTORED_COUNT 个"
-            echo "恢复完成: $LOST_COUNT 个"
-            
-            if [ $LOST_COUNT -gt 0 ]; then
-              echo "⚠️  以下包被意外禁用后已自动恢复:$LOST_PACKAGES"
-              # 重新运行 defconfig 确保依赖完整
-              make defconfig 2>/dev/null || true
+              LOST_COUNT=$((LOST_COUNT + 1))
+              LOST_PACKAGES="$LOST_PACKAGES $pkg"
             fi
-          else
-            echo "⚠️  未找到备份文件，跳过验证"
+          done
+          
+          echo ""
+          echo "=== 恢复结果 ==="
+          echo "保留成功: $RESTORED_COUNT 个"
+          echo "恢复完成: $LOST_COUNT 个"
+          
+          if [ $LOST_COUNT -gt 0 ]; then
+            echo "⚠️  以下包被意外禁用后已自动恢复:$LOST_PACKAGES"
+            # 重新运行 defconfig 确保依赖完整
+            make defconfig 2>/dev/null || make olddefconfig
           fi
           
           echo ""
@@ -253,7 +158,14 @@ jobs:
           # 显示关键包状态
           echo ""
           echo "关键插件状态:"
-          grep -E "CONFIG_PACKAGE_(luci-app-dockerman|luci-app-diskman|luci-theme-argon|docker|dockerd|luci-app-smartdns)" .config 2>/dev/null | grep "=y$" || echo "无"
+          for pkg in "${REQUIRED_PACKAGES[@]}"; do
+            STATUS=$(grep "CONFIG_PACKAGE_${pkg}=y" .config 2>/dev/null || echo "")
+            if [ -n "$STATUS" ]; then
+              echo "  ✅ $pkg"
+            else
+              echo "  ❌ $pkg"
+            fi
+          done
 
       - name: Build firmware
         run: |
