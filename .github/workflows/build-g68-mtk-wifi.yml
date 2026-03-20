@@ -88,6 +88,9 @@ jobs:
           make defconfig
 
       - name: Build firmware
+        env:
+          CARGO_BUILD_JOBS: 2
+          RUSTFLAGS: -C codegen-units=1 -C opt-level=1
         run: |
           if [ -n "${{ github.event.inputs.make_args }}" ]; then
             make ${{ github.event.inputs.make_args }}
