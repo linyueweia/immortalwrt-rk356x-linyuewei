@@ -83,9 +83,14 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Configure build
+      - name: Configure build (step 1 - init new packages)
         run: |
           make defconfig
+
+      - name: Configure build (step 2 - sync with device config)
+        run: |
+          cp defconfig/${{ env.CONFIG_FILE }} .config
+          make olddefconfig
 
       - name: Build firmware
         run: |
