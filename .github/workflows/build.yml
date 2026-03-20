@@ -87,6 +87,10 @@ jobs:
           rm -f .config
           cp defconfig/${{ env.CONFIG_FILE }} .config
           make defconfig
+          # 禁用 rust 相关包（GitHub Actions 构建失败）
+          sed -i 's/CONFIG_PACKAGE_rust=y/# CONFIG_PACKAGE_rust is not set/' .config 2>/dev/null || true
+          # 禁用所有可能需要 rust 的包
+          sed -i 's/CONFIG_PACKAGE_sing-box=y/# CONFIG_PACKAGE_sing-box is not set/' .config 2>/dev/null || true
           make olddefconfig || true
 
       - name: Build firmware
