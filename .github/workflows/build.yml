@@ -53,7 +53,6 @@ jobs:
             zip \
             unzip \
             python3 \
-            python3-pyserial \
             rsync \
             time \
             ccache \
