@@ -85,11 +85,12 @@ jobs:
           make defconfig
 
       - name: Build firmware
-        env:
-          MAKE_JOBS: ${{ github.event.inputs.threads || '8' }}
-          MAKE_ARGS: ${{ github.event.inputs.make_args || '-j$(nproc)' }}
         run: |
-          make $MAKE_ARGS V=s
+          if [ -n "${{ github.event.inputs.make_args }}" ]; then
+            make ${{ github.event.inputs.make_args }} V=s
+          else
+            make -j$(nproc) V=s
+          fi
 
       - name: Generate build info
         run: |
