@@ -1,195 +1,195 @@
 name: Build G68 Plus Docker Firmware
-
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: 0 20 * * *
-
-env:
-  REPO_URL: https://github.com/linyueweia/immortalwrt-rk356x-linyuewei
-  REPO_BRANCH: main
-  CONFIG_FILE: g68-plus-docker.config
-  CACHE_TOOLCHAIN: true
-  UPLOAD_BIN_DIR: false
-  FIRMWARE_RELEASE: true
-  FIRMWARE_TAG: g68-plus-docker
-  TZ: Asia/Shanghai
-  GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
-
-jobs:
-  Build:
-    runs-on: ubuntu-22.04
-
-    outputs:
-      COMMIT_AUTHOR: ${{ steps.clone.outputs.COMMIT_AUTHOR }}
-      COMMIT_DATE: ${{ steps.clone.outputs.COMMIT_DATE }}
-      COMMIT_MESSAGE: ${{ steps.clone.outputs.COMMIT_MESSAGE }}
-      COMMIT_HASH: ${{ steps.clone.outputs.COMMIT_HASH }}
-      DEVICE_TARGET: ${{ steps.variable.outputs.DEVICE_TARGET }}
-      DEVICE_SUBTARGET: ${{ steps.variable.outputs.DEVICE_SUBTARGET }}
-
-    steps:
-    - name: Merge Disks
-      uses: easimon/maximize-build-space@master
-      with:
-        swap-size-mb: 1024
-        temp-reserve-mb: 100
-        root-reserve-mb: 1024
-
-    - name: Checkout
-      uses: actions/checkout@main
-
-    - name: Create a Working Directory
-      run: |
-        mkdir -p ${GITHUB_WORKSPACE}/workdir
-        chmod 755 ${GITHUB_WORKSPACE}/workdir
-        echo "WORKDIR_PATH=${GITHUB_WORKSPACE}/workdir" >> $GITHUB_ENV
-
-    - name: Initialization Environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        df -hT
-        [ -n "$(docker images -q)" ] && docker rmi $(docker images -q)
-        sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android $AGENT_TOOLSDIRECTORY
-        sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
-        sudo -E apt-get -y update
-        sudo -E apt-get -y install $(curl -fsSL is.gd/depends_ubuntu_2204)
-        sudo -E apt-get -y install python3-pyelftools
-        sudo -E systemctl daemon-reload
-        sudo -E apt-get -y autoremove --purge
-        sudo -E apt-get -y clean
-        sudo timedatectl set-timezone "$TZ"
-
-    - name: Clone Source Code
-      working-directory: ${{ env.WORKDIR_PATH }}/workdir
-      id: clone
-      run: |
-        df -hT
-        git clone $REPO_URL -b $REPO_BRANCH openwrt
-        cd openwrt
-        echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
-        COMMIT_AUTHOR=$(git show -s --date=short --format="浣滆€? %an")
-        echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_ENV
-        echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_OUTPUT
-        COMMIT_DATE=$(git show -s --date=short --format="鏃堕棿: %ci")
-        echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_ENV
-        echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_OUTPUT
-        COMMIT_MESSAGE=$(git show -s --date=short --format="鍐呭: %s")
-        echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
-        echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
-        COMMIT_HASH=$(git show -s --date=short --format="hash: %H")
-        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
-        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_OUTPUT
-
-    - name: Install Feeds
-      run: |
-        df -hT
-        cd $OPENWRT_PATH
-        ./scripts/feeds update -a
-        ./scripts/feeds install -a
-
-    - name: Generate Variables
-      id: variable
-      run: |
-        df -hT
-        cp ${{ github.workspace }}/$CONFIG_FILE $OPENWRT_PATH/.config
-        cd $OPENWRT_PATH
-        # 绂佺敤 rust 鐩稿叧鍖咃紙GitHub Actions 鏋勫缓浼氬け璐ワ級
-        sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
-        sed -i 's/^CONFIG_PACKAGE_sing-box=y$/# CONFIG_PACKAGE_sing-box is not set/' .config
-        sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust=y$/# CONFIG_PACKAGE_shadowsocks-rust is not set/' .config || true
-        sed -i '/^CONFIG_SING_BOX_BUILD/ s/^/# /' .config
-        make defconfig > /dev/null 2>&1
-        SOURCE_REPO="$(echo $REPO_URL | awk -F '/' '{print $(NF)}')"
-        echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
-        DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}')
-        echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
-        echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_OUTPUT
-        DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
-        echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
-        echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_OUTPUT
-
-    - name: Cache Toolchain
-      if: env.CACHE_TOOLCHAIN == 'true'
-      uses: HiGarfield/cachewrtbuild@main
-      with:
-        ccache: false
-        mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
-        prefix: ${{ env.OPENWRT_PATH }}
-
-    - name: Download DL Package
-      run: |
-        df -hT
-        cd $OPENWRT_PATH
-        make defconfig
-        make download -j8
-        find dl -size -1024c -exec ls -l {} \;
-        find dl -size -1024c -exec rm -f {} \;
-
-    - name: Compile Firmware
-      id: compile
-      run: |
-        df -hT
-        cd $OPENWRT_PATH
-        echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
-        echo "status=success" >> $GITHUB_OUTPUT
-        echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
-        echo "TAG_DATE=$(date +"%Y.%m.%d-%H.%M")" >> $GITHUB_ENV
-        echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
-
-    - name: Check Space Usage
-      if: (!cancelled())
-      run: df -hT
-
-    - name: Upload Bin Directory
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      uses: actions/upload-artifact@main
-      with:
-        name: ${{ env.SOURCE_REPO }}-bin-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
-        path: ${{ env.OPENWRT_PATH }}/bin
-
-    - name: Organize Files
-      if: steps.compile.outputs.status == 'success'
-      run: |
-        cd $OPENWRT_PATH/bin/targets/*/*
-        cat sha256sums
-        cp $OPENWRT_PATH/.config build.config
-        mv -f $OPENWRT_PATH/bin/packages/*/*/*.ipk packages
-        tar -zcf Packages.tar.gz packages
-        rm -rf packages feeds.buildinfo version.buildinfo
-        echo "KERNEL=$(cat *.manifest | grep ^kernel | cut -d- -f2 | tr -d ' ')" >> $GITHUB_ENV
-        echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
-
-    - name: Upload Firmware To Artifact
-      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE != 'true'
-      uses: actions/upload-artifact@main
-      with:
-        name: ${{ env.SOURCE_REPO }}-firmware-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
-        path: ${{ env.FIRMWARE_PATH }}
-
-    - name: Upload Firmware To Release
-      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
-      uses: ncipollo/release-action@v1
-      with:
-        name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }}
-        allowUpdates: true
-        tag: ${{ env.TAG_DATE }}-${{ env.FIRMWARE_TAG }}
-        token: ${{ env.GITHUB_TOKEN }}
-        artifacts: ${{ env.FIRMWARE_PATH }}/*
-        body: |
-          **This is OpenWrt Firmware for ${{ env.FIRMWARE_TAG }}**
-          ### 馃搾 鍥轰欢淇℃伅
-          - 馃捇 骞冲彴鏋舵瀯: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }} (rk33xx, rk35xx)
-          - 鈿?鍥轰欢婧愮爜: ${{ env.REPO_URL }}
-          - 馃挐 婧愮爜鍒嗘敮: ${{ env.REPO_BRANCH }}
-          - 馃殌 鍐呮牳鐗堟湰: ${{ env.KERNEL }}
-          - 馃寪 榛樿鍦板潃: 192.168.1.1
-          - 馃攽 榛樿瀵嗙爜: password
-          ### 馃 鍥轰欢鐗堟湰
-          - 鍥轰欢缂栬瘧鍓嶆渶鍚庝竴娆♀灕[涓绘簮鐮乚(${{ env.REPO_URL }})鏇存柊璁板綍
-          - ${{ env.COMMIT_AUTHOR }}
-          - ${{ env.COMMIT_DATE }}
-          - ${{ env.COMMIT_MESSAGE }}
-          - ${{ env.COMMIT_HASH }}
+2: 
+3: on:
+4:   workflow_dispatch:
+5:   schedule:
+6:     - cron: 0 20 * * *
+7: 
+8: env:
+9:   REPO_URL: https://github.com/linyueweia/immortalwrt-rk356x-linyuewei
+10:   REPO_BRANCH: main
+11:   CONFIG_FILE: g68-plus-docker.config
+12:   CACHE_TOOLCHAIN: true
+13:   UPLOAD_BIN_DIR: false
+14:   FIRMWARE_RELEASE: true
+15:   FIRMWARE_TAG: g68-plus-docker
+16:   TZ: Asia/Shanghai
+17:   GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+18: 
+19: jobs:
+20:   Build:
+21:     runs-on: ubuntu-22.04
+22: 
+23:     outputs:
+24:       COMMIT_AUTHOR: ${{ steps.clone.outputs.COMMIT_AUTHOR }}
+25:       COMMIT_DATE: ${{ steps.clone.outputs.COMMIT_DATE }}
+26:       COMMIT_MESSAGE: ${{ steps.clone.outputs.COMMIT_MESSAGE }}
+27:       COMMIT_HASH: ${{ steps.clone.outputs.COMMIT_HASH }}
+28:       DEVICE_TARGET: ${{ steps.variable.outputs.DEVICE_TARGET }}
+29:       DEVICE_SUBTARGET: ${{ steps.variable.outputs.DEVICE_SUBTARGET }}
+30: 
+31:     steps:
+32:     - name: Merge Disks
+33:       uses: easimon/maximize-build-space@master
+34:       with:
+35:         swap-size-mb: 1024
+36:         temp-reserve-mb: 100
+37:         root-reserve-mb: 1024
+38: 
+39:     - name: Checkout
+40:       uses: actions/checkout@main
+41: 
+42:     - name: Create a Working Directory
+43:       run: |
+44:         mkdir -p ${GITHUB_WORKSPACE}/workdir
+45:         chmod 755 ${GITHUB_WORKSPACE}/workdir
+46:         echo "WORKDIR_PATH=${GITHUB_WORKSPACE}/workdir" >> $GITHUB_ENV
+47: 
+48:     - name: Initialization Environment
+49:       env:
+50:         DEBIAN_FRONTEND: noninteractive
+51:       run: |
+52:         df -hT
+53:         [ -n "$(docker images -q)" ] && docker rmi $(docker images -q)
+54:         sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android $AGENT_TOOLSDIRECTORY
+55:         sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
+56:         sudo -E apt-get -y update
+57:         sudo -E apt-get -y install $(curl -fsSL is.gd/depends_ubuntu_2204)
+58:         sudo -E apt-get -y install python3-pyelftools
+59:         sudo -E systemctl daemon-reload
+60:         sudo -E apt-get -y autoremove --purge
+61:         sudo -E apt-get -y clean
+62:         sudo timedatectl set-timezone "$TZ"
+63: 
+64:     - name: Clone Source Code
+65:       working-directory: ${{ env.WORKDIR_PATH }}
+66:       id: clone
+67:       run: |
+68:         df -hT
+69:         git clone $REPO_URL -b $REPO_BRANCH openwrt
+70:         cd openwrt
+71:         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+72:         COMMIT_AUTHOR=$(git show -s --date=short --format="作者: %an")
+73:         echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_ENV
+74:         echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_OUTPUT
+75:         COMMIT_DATE=$(git show -s --date=short --format="时间: %ci")
+76:         echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_ENV
+77:         echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_OUTPUT
+78:         COMMIT_MESSAGE=$(git show -s --date=short --format="内容: %s")
+79:         echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
+80:         echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
+81:         COMMIT_HASH=$(git show -s --date=short --format="hash: %H")
+82:         echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
+83:         echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_OUTPUT
+84: 
+85:     - name: Install Feeds
+86:       run: |
+87:         df -hT
+88:         cd $OPENWRT_PATH
+89:         ./scripts/feeds update -a
+90:         ./scripts/feeds install -a
+91: 
+92:     - name: Generate Variables
+93:       id: variable
+94:       run: |
+95:         df -hT
+96:         cp ${{ github.workspace }}/$CONFIG_FILE $OPENWRT_PATH/.config
+97:         cd $OPENWRT_PATH
+98:         # 禁用 rust 相关包（GitHub Actions 构建会失败）
+99:         sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
+100:         sed -i 's/^CONFIG_PACKAGE_sing-box=y$/# CONFIG_PACKAGE_sing-box is not set/' .config
+101:         sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust=y$/# CONFIG_PACKAGE_shadowsocks-rust is not set/' .config || true
+102:         sed -i '/^CONFIG_SING_BOX_BUILD/ s/^/# /' .config
+103:         make defconfig > /dev/null 2>&1
+104:         SOURCE_REPO="$(echo $REPO_URL | awk -F '/' '{print $(NF)}')"
+105:         echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
+106:         DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}')
+107:         echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
+108:         echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_OUTPUT
+109:         DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
+110:         echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
+111:         echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_OUTPUT
+112: 
+113:     - name: Cache Toolchain
+114:       if: env.CACHE_TOOLCHAIN == 'true'
+115:       uses: HiGarfield/cachewrtbuild@main
+116:       with:
+117:         ccache: false
+118:         mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
+119:         prefix: ${{ env.OPENWRT_PATH }}
+120: 
+121:     - name: Download DL Package
+122:       run: |
+123:         df -hT
+124:         cd $OPENWRT_PATH
+125:         make defconfig
+126:         make download -j8
+127:         find dl -size -1024c -exec ls -l {} \;
+128:         find dl -size -1024c -exec rm -f {} \;
+129: 
+130:     - name: Compile Firmware
+131:       id: compile
+132:       run: |
+133:         df -hT
+134:         cd $OPENWRT_PATH
+135:         echo -e "$(nproc) thread compile"
+136:         make -j$(nproc) || make -j1 || make -j1 V=s
+137:         echo "status=success" >> $GITHUB_OUTPUT
+138:         echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
+139:         echo "TAG_DATE=$(date +"%Y.%m.%d-%H.%M")" >> $GITHUB_ENV
+140:         echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
+141: 
+142:     - name: Check Space Usage
+143:       if: (!cancelled())
+144:       run: df -hT
+145: 
+146:     - name: Upload Bin Directory
+147:       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+148:       uses: actions/upload-artifact@main
+149:       with:
+150:         name: ${{ env.SOURCE_REPO }}-bin-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
+151:         path: ${{ env.OPENWRT_PATH }}/bin
+152: 
+153:     - name: Organize Files
+154:       if: steps.compile.outputs.status == 'success'
+155:       run: |
+156:         cd $OPENWRT_PATH/bin/targets/*/*
+157:         cat sha256sums
+158:         cp $OPENWRT_PATH/.config build.config
+159:         mv -f $OPENWRT_PATH/bin/packages/*/*/*.ipk packages
+160:         tar -zcf Packages.tar.gz packages
+161:         rm -rf packages feeds.buildinfo version.buildinfo
+162:         echo "KERNEL=$(cat *.manifest | grep ^kernel | cut -d- -f2 | tr -d ' ')" >> $GITHUB_ENV
+163:         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
+164: 
+165:     - name: Upload Firmware To Artifact
+166:       if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE != 'true'
+167:       uses: actions/upload-artifact@main
+168:       with:
+169:         name: ${{ env.SOURCE_REPO }}-firmware-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
+170:         path: ${{ env.FIRMWARE_PATH }}
+171: 
+172:     - name: Upload Firmware To Release
+173:       if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
+174:       uses: ncipollo/release-action@v1
+175:       with:
+176:         name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }}
+177:         allowUpdates: true
+178:         tag: ${{ env.TAG_DATE }}-${{ env.FIRMWARE_TAG }}
+179:         token: ${{ env.GITHUB_TOKEN }}
+180:         artifacts: ${{ env.FIRMWARE_PATH }}/*
+181:         body: |
+182:           **This is OpenWrt Firmware for ${{ env.FIRMWARE_TAG }}**
+183:           ### 📒 固件信息
+184:           - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }} (rk33xx, rk35xx)
+185:           - ⚽ 固件源码: ${{ env.REPO_URL }}
+186:           - 💝 源码分支: ${{ env.REPO_BRANCH }}
+187:           - 🚀 内核版本: ${{ env.KERNEL }}
+188:           - 🌐 默认地址: 192.168.1.1
+189:           - 🔑 默认密码: password
+190:           ### 🧊 固件版本
+191:           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
+192:           - ${{ env.COMMIT_AUTHOR }}
+193:           - ${{ env.COMMIT_DATE }}
+194:           - ${{ env.COMMIT_MESSAGE }}
+195:           - ${{ env.COMMIT_HASH }}
