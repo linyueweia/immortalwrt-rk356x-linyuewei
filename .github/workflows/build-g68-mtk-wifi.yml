@@ -82,22 +82,17 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Backup device config
+      - name: Apply device config and configure
         run: |
-          cp defconfig/${{ env.CONFIG_FILE }} /tmp/device_config_backup
-
-      - name: Configure build
-        run: |
+          cp defconfig/${{ env.CONFIG_FILE }} .config
           make defconfig
-          cp /tmp/device_config_backup .config
-          make olddefconfig
 
       - name: Build firmware
         run: |
           if [ -n "${{ github.event.inputs.make_args }}" ]; then
-            make ${{ github.event.inputs.make_args }} V=s
+            make ${{ github.event.inputs.make_args }}
           else
-            make -j${{ github.event.inputs.threads || '8' }} V=s
+            make -j${{ github.event.inputs.threads || '8' }}
           fi
 
       - name: Generate build info
