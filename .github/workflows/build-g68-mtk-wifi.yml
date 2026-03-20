@@ -74,22 +74,18 @@ jobs:
         run: |
           git submodule update --init --recursive
 
-      - name: Apply device config
-        run: |
-          cp defconfig/${{ env.CONFIG_FILE }} .config
-
       - name: Prepare feeds
         run: |
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Configure build (step 1 - init new packages)
-        run: |
-          make defconfig
-
-      - name: Configure build (step 2 - sync with device config)
+      - name: Apply device config
         run: |
           cp defconfig/${{ env.CONFIG_FILE }} .config
+
+      - name: Configure build
+        run: |
+          make defconfig
           make olddefconfig
 
       - name: Build firmware
