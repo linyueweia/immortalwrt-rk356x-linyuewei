@@ -83,19 +83,15 @@ jobs:
         run: |
           echo "=== 配置编译 ==="
           
-          # 1. 复制用户配置（覆盖 feeds 安装时的默认配置）
+          # 1. 复制用户配置
           cp defconfig/${{ env.CONFIG_FILE }} .config
           echo "✅ 已复制配置文件"
           
-          # 2. 先运行 defconfig 同步 feeds 后的配置
-          make defconfig
-          echo "✅ 已运行 defconfig（同步 feeds 配置）"
-          
-          # 3. 再运行 olddefconfig 自动补全依赖（保留用户选择）
-          make olddefconfig
+          # 2. 运行 olddefconfig 补全依赖（使用 yes 自动回答问题）
+          yes "" | make olddefconfig
           echo "✅ 已运行 olddefconfig（依赖自动补全完成）"
           
-          # 4. 验证关键包是否被保留
+          # 3. 验证关键包是否被保留
           echo ""
           echo "=== 验证关键包是否被保留 ==="
           
@@ -145,8 +141,8 @@ jobs:
           
           if [ $LOST_COUNT -gt 0 ]; then
             echo "⚠️  以下包被意外禁用后已自动恢复:$LOST_PACKAGES"
-            # 重新运行 olddefconfig 确保依赖完整（不要再用 defconfig，会覆盖）
-            make olddefconfig
+            # 重新运行 olddefconfig 确保依赖完整
+            yes "" | make olddefconfig
           fi
           
           echo ""
