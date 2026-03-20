@@ -45,21 +45,6 @@ jobs:
         chmod 755 ${GITHUB_WORKSPACE}/workdir
         echo "WORKDIR_PATH=${GITHUB_WORKSPACE}/workdir" >> $GITHUB_ENV
 
-    - name: Check Server Performance
-      run: |
-        echo "璀﹀憡鈿?
-        echo "鍒嗛厤鐨勬湇鍔″櫒鎬ц兘鏈夐檺锛岃嫢閫夋嫨鐨勬彃浠惰繃澶氾紝鍔″繀娉ㄦ剰CPU鎬ц兘锛?
-        echo -e "宸茬煡CPU鍨嬪彿(闄嶅簭): 7763锛?370C锛?272CL锛?171M锛孍5-2673\n"
-        echo "--------------------------CPU淇℃伅--------------------------"
-        echo "CPU鐗╃悊鏁伴噺: $(cat /proc/cpuinfo | grep "physical id" | sort | uniq | wc -l)"
-        echo "CPU鏍稿績鏁伴噺: $(nproc)"
-        echo -e "CPU鍨嬪彿淇℃伅:$(cat /proc/cpuinfo | grep -m1 name | awk -F: '{print $2}')\n"
-        echo "--------------------------鍐呭瓨淇℃伅--------------------------"
-        echo "宸插畨瑁呭唴瀛樿缁嗕俊鎭?"
-        echo -e "$(sudo lshw -short -C memory | grep GiB)\n"
-        echo "--------------------------纭洏淇℃伅--------------------------"
-        echo "纭洏鏁伴噺: $(ls /dev/sd* | grep -v [1-9] | wc -l)" && df -hT
-
     - name: Initialization Environment
       env:
         DEBIAN_FRONTEND: noninteractive
