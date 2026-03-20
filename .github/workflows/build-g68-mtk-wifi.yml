@@ -59,14 +59,17 @@ jobs:
             time \
             ccache \
             git \
-            subversion
+            subversion \
+            libncurses-dev \
+            uuid-dev \
+            libpcap-dev
           sudo pip3 install pyelftools
 
-      - name: Cache ccached
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ccached-${{ env.DEVICE }}-${{ github.run_id }}
+          key: ccached-${{ env.DEVICE }}-${{ github.sha }}
           restore-keys: |
             ccached-${{ env.DEVICE }}-
 
@@ -79,13 +82,14 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Apply device config
+      - name: Backup device config
         run: |
-          cp defconfig/${{ env.CONFIG_FILE }} .config
+          cp defconfig/${{ env.CONFIG_FILE }} /tmp/device_config_backup
 
       - name: Configure build
         run: |
           make defconfig
+          cp /tmp/device_config_backup .config
           make olddefconfig
 
       - name: Build firmware
