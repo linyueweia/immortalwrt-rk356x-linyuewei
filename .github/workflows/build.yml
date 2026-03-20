@@ -53,11 +53,13 @@ jobs:
             zip \
             unzip \
             python3 \
+            python3-pip \
             rsync \
             time \
             ccache \
             git \
             subversion
+          sudo pip3 install pyelftools
 
       - name: Cache ccached
         uses: actions/cache@v4
@@ -89,7 +91,7 @@ jobs:
           if [ -n "${{ github.event.inputs.make_args }}" ]; then
             make ${{ github.event.inputs.make_args }} V=s
           else
-            make -j$(nproc) V=s
+            make -j${{ github.event.inputs.threads || '8' }} V=s
           fi
 
       - name: Generate build info
