@@ -43,7 +43,7 @@ jobs:
       run: |
         mkdir -p ${GITHUB_WORKSPACE}/workdir
         chmod 755 ${GITHUB_WORKSPACE}/workdir
-        echo "WORKDIR_PATH=$PWD" >> $GITHUB_ENV
+        echo "WORKDIR_PATH=${GITHUB_WORKSPACE}/workdir" >> $GITHUB_ENV
 
     - name: Check Server Performance
       run: |
@@ -108,12 +108,12 @@ jobs:
       id: variable
       run: |
         df -hT
-        cp ${{ env.WORKDIR_PATH }}/$CONFIG_FILE $OPENWRT_PATH/.config
+        cp ${{ github.workspace }}/$CONFIG_FILE $OPENWRT_PATH/.config
         cd $OPENWRT_PATH
         # 绂佺敤 rust 鐩稿叧鍖咃紙GitHub Actions 鏋勫缓浼氬け璐ワ級
         sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
         sed -i 's/^CONFIG_PACKAGE_sing-box=y$/# CONFIG_PACKAGE_sing-box is not set/' .config
-        sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust/y/# CONFIG_PACKAGE_shadowsocks-rust/' .config || true
+        sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust=y$/# CONFIG_PACKAGE_shadowsocks-rust is not set/' .config || true
         sed -i '/^CONFIG_SING_BOX_BUILD/ s/^/# /' .config
         make defconfig > /dev/null 2>&1
         SOURCE_REPO="$(echo $REPO_URL | awk -F '/' '{print $(NF)}')"
