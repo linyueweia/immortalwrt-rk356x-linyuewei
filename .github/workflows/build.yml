@@ -69,13 +69,13 @@ jobs:
         git clone $REPO_URL -b $REPO_BRANCH openwrt
         cd openwrt
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
-        COMMIT_AUTHOR=$(git show -s --date=short --format="浣滆€? %an")
+        COMMIT_AUTHOR=$(git show -s --date=short --format="作者: %an")
         echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_ENV
         echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_OUTPUT
-        COMMIT_DATE=$(git show -s --date=short --format="鏃堕棿: %ci")
+        COMMIT_DATE=$(git show -s --date=short --format="时间: %ci")
         echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_ENV
         echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_OUTPUT
-        COMMIT_MESSAGE=$(git show -s --date=short --format="鍐呭: %s")
+        COMMIT_MESSAGE=$(git show -s --date=short --format="内容: %s")
         echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
         echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
         COMMIT_HASH=$(git show -s --date=short --format="hash: %H")
@@ -118,14 +118,14 @@ jobs:
         df -hT
         cd $OPENWRT_PATH
         make defconfig
-        # 绂佺敤鎵€鏈?rust 鐩稿叧鍖咃紙纾佺洏绌洪棿涓嶈冻浼氬鑷寸紪璇戝け璐ワ級
-        # 绂佺敤 rust 鍜?cargo
+        # 禁用所有 rust 相关包（磁盘空间不足会导致编译失败）
+        # 禁用 rust 和 cargo
         sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
         sed -i 's/^CONFIG_PACKAGE_cargo=y$/# CONFIG_PACKAGE_cargo is not set/' .config 2>/dev/null || true
-        # 绂佺敤 sing-box 鍜?shadowsocks-rust
+        # 禁用 sing-box 和 shadowsocks-rust
         sed -i 's/^CONFIG_PACKAGE_sing-box=y$/# CONFIG_PACKAGE_sing-box is not set/' .config
         sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust/y/# CONFIG_PACKAGE_shadowsocks-rust/' .config 2>/dev/null || true
-        # 绂佺敤鍏朵粬鍙兘渚濊禆 rust 鐨勫寘
+        # 禁用其他可能依赖 rust 的包
         sed -i '/^CONFIG.*rust/ s/^/# /' .config 2>/dev/null || true
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
@@ -184,15 +184,15 @@ jobs:
         artifacts: ${{ env.FIRMWARE_PATH }}/*
         body: |
           **This is OpenWrt Firmware for ${{ env.FIRMWARE_TAG }}**
-          ### 馃搾 鍥轰欢淇℃伅
-          - 馃捇 骞冲彴鏋舵瀯: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }} (rk33xx, rk35xx)
-          - 鈿?鍥轰欢婧愮爜: ${{ env.REPO_URL }}
-          - 馃挐 婧愮爜鍒嗘敮: ${{ env.REPO_BRANCH }}
-          - 馃殌 鍐呮牳鐗堟湰: ${{ env.KERNEL }}
-          - 馃寪 榛樿鍦板潃: 192.168.1.1
-          - 馃攽 榛樿瀵嗙爜: password
-          ### 馃 鍥轰欢鐗堟湰
-          - 鍥轰欢缂栬瘧鍓嶆渶鍚庝竴娆♀灕[涓绘簮鐮乚(${{ env.REPO_URL }})鏇存柊璁板綍
+          ### 📒 固件信息
+          - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }} (rk33xx, rk35xx)
+          - ⚽ 固件源码: ${{ env.REPO_URL }}
+          - 💝 源码分支: ${{ env.REPO_BRANCH }}
+          - 🚀 内核版本: ${{ env.KERNEL }}
+          - 🌐 默认地址: 192.168.1.1
+          - 🔑 默认密码: password
+          ### 🧊 固件版本
+          - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.COMMIT_AUTHOR }}
           - ${{ env.COMMIT_DATE }}
           - ${{ env.COMMIT_MESSAGE }}
