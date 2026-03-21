@@ -119,10 +119,12 @@ jobs:
         cd $OPENWRT_PATH
         make defconfig
         # 禁用所有 rust 相关包（磁盘空间不足会导致编译失败）
-        # 禁用 rust 和 cargo
+        # 禁用所有 rust 和 cargo 相关配置
         sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
         sed -i 's/^CONFIG_PACKAGE_cargo=y$/# CONFIG_PACKAGE_cargo is not set/' .config 2>/dev/null || true
         sed -i 's/^CONFIG_PACKAGE_rust-host=y$/# CONFIG_PACKAGE_rust-host is not set/' .config 2>/dev/null || true
+        # 禁用 feeds 中的 rust 包
+        sed -i '/feeds\/packages\/rust/d' .config 2>/dev/null || true
         # 禁用 sing-box 和 shadowsocks-rust
         sed -i 's/^CONFIG_PACKAGE_sing-box=y$/# CONFIG_PACKAGE_sing-box is not set/' .config
         sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust-sslocal=y$/# CONFIG_PACKAGE_shadowsocks-rust-sslocal is not set/' .config 2>/dev/null || true
@@ -130,8 +132,10 @@ jobs:
         # 禁用其他可能依赖 rust 的包
         sed -i '/^CONFIG.*=.*rust/ s/^/# /' .config 2>/dev/null || true
         sed -i '/^CONFIG.*rust/ s/^/# /' .config 2>/dev/null || true
-        # 确保 rust 被禁用
-        grep -i rust .config || echo "rust 已禁用"
+        sed -i '/^# CONFIG.*rust/ s/^# //' .config 2>/dev/null || true
+        # 检查是否还有 rust 相关包
+        echo "=== 检查 rust 配置 ==="
+        grep -c "rust" .config || echo "0 个 rust 配置项"
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -156,6 +160,16 @@ jobs:
       run: |
         df -hT
         cd $OPENWRT_PATH
+        # 再次确认 rust 被禁用
+        sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
+        sed -i 's/^CONFIG_PACKAGE_rust-host=y$/# CONFIG_PACKAGE_rust-host is not set/' .config
+        # 禁用 feeds/packages 中的 rust
+        if [ -d "feeds/packages/lang/rust" ]; then
+          rm -rf feeds/packages/lang/rust
+        fi
+        # 检查 rust
+        echo "=== 编译前检查 rust ==="
+        grep "rust" .config | head -5 || echo "rust 已禁用"
         echo -e "$(nproc) thread compile"
         make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
