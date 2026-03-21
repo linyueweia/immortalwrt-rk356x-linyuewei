@@ -131,6 +131,23 @@ jobs:
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
+    - name: Download Rockchip rkbin Firmware
+      run: |
+        df -hT
+        cd $OPENWRT_PATH
+        # 下载 rkbin 仓库获取 DDR 固件和 BL31 文件
+        if [ ! -d "rkbin" ]; then
+          git clone https://github.com/rockchip-linux/rkbin.git --depth 1 rkbin
+        fi
+        # 创建 staging 目录
+        mkdir -p staging_dir/target-aarch64_generic_musl/image
+        # 复制 DDR 固件和 BL31 文件
+        cp rkbin/bin/rk35/rk3568_ddr_1560MHz_v1.21.bin staging_dir/target-aarch64_generic_musl/image/ 2>/dev/null || \
+        cp rkbin/bin/rk35/rk3568_ddr_1560MHz_v1.23.bin staging_dir/target-aarch64_generic_musl/image/
+        cp rkbin/bin/rk35/rk3568_bl31_v1.44.elf staging_dir/target-aarch64_generic_musl/image/ 2>/dev/null || \
+        cp rkbin/bin/rk35/rk3568_bl31_v1.45.elf staging_dir/target-aarch64_generic_musl/image/
+        ls -la staging_dir/target-aarch64_generic_musl/image/
+
     - name: Compile Firmware
       id: compile
       run: |
