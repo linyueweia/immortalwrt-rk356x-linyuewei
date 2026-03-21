@@ -95,15 +95,7 @@ jobs:
         df -hT
         cp ${{ github.workspace }}/$CONFIG_FILE $OPENWRT_PATH/.config
         cd $OPENWRT_PATH
-        # 绂佺敤 rust 鐩稿叧鍖咃紙GitHub Actions 鏋勫缓浼氬け璐ワ級
-        sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
-        sed -i 's/^CONFIG_PACKAGE_sing-box=y$/# CONFIG_PACKAGE_sing-box is not set/' .config
-        sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust=y$/# CONFIG_PACKAGE_shadowsocks-rust is not set/' .config || true
-        sed -i '/^CONFIG_SING_BOX_BUILD/ s/^/# /' .config
         make defconfig > /dev/null 2>&1
-        # make defconfig 浼氶噸鏂板惎鐢?rust锛岄渶瑕佸啀娆＄鐢?        sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
-        sed -i 's/^CONFIG_PACKAGE_sing-box=y$/# CONFIG_PACKAGE_sing-box is not set/' .config
-        # 寮哄埗纭繚 rust 琚鐢?        grep -q "^# CONFIG_PACKAGE_rust is not set" .config || echo "# CONFIG_PACKAGE_rust is not set" >> .config
         SOURCE_REPO="$(echo $REPO_URL | awk -F '/' '{print $(NF)}')"
         echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
         DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}')
@@ -126,8 +118,6 @@ jobs:
         df -hT
         cd $OPENWRT_PATH
         make defconfig
-        # make defconfig 浼氬惎鐢?rust锛岄渶瑕佸啀娆＄鐢?        sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
-        sed -i 's/^CONFIG_PACKAGE_sing-box=y$/# CONFIG_PACKAGE_sing-box is not set/' .config
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
