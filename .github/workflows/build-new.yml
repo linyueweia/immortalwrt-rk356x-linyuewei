@@ -1,0 +1,141 @@
+name: Build G68 Plus Docker Firmware
+
+on:
+  workflow_dispatch:
+    inputs:
+      threads:
+        description: '编译线程数'
+        required: false
+        default: '4'
+        type: string
+
+env:
+  DEVICE: g68-plus-docker
+  CONFIG_FILE: g68-plus-docker.config
+  TZ: Asia/Shanghai
+  CARGO_BUILD_JOBS: 2
+  RUSTFLAGS: -C codegen-units=1 -C opt-level=1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: linyueweia/immortalwrt-rk356x-linyuewei
+          fetch-depth: 1
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            flex \
+            bison \
+            g++ \
+            gperf \
+            cmake \
+            ninja-build \
+            libelf-dev \
+            libssl-dev \
+            zlib1g-dev \
+            libgmp-dev \
+            libmpc-dev \
+            libmpfr-dev \
+            gettext \
+            autopoint \
+            pkg-config \
+            zip \
+            unzip \
+            python3 \
+            python3-pip \
+            rsync \
+            time \
+            ccache \
+            git \
+            subversion \
+            libncurses-dev \
+            uuid-dev \
+            libpcap-dev
+          sudo pip3 install pyelftools
+
+      - name: Clean up disk space
+        run: |
+          df -hT
+          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache /root/.cache /root/.npm /root/.yarn
+          sudo apt-get clean
+          sudo rm -rf /var/cache/apt/archives/*
+          df -hT
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccached-${{ env.DEVICE }}-${{ github.sha }}
+          restore-keys: |
+            ccached-${{ env.DEVICE }}-
+
+      - name: Initialize submodules
+        run: |
+          git submodule update --init --recursive
+
+      - name: Prepare feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Apply device config and configure
+        run: |
+          cp defconfig/${{ env.CONFIG_FILE }} .config
+          make defconfig
+
+      - name: Download required files
+        run: |
+          # 下载 rkbin 固件（Rockchip 需要）
+          if [ ! -d "rkbin" ]; then
+            git clone --depth 1 https://github.com/rockchip-linux/rkbin.git
+          fi
+          mkdir -p staging_dir/target-aarch64_generic_musl/image
+          cp rkbin/bin/rk35/rk3568_ddr_1560MHz_v1.23.bin staging_dir/target-aarch64_generic_musl/image/rk3568_ddr_1560MHz_v1.21.bin
+          cp rkbin/bin/rk35/rk3568_bl31_v1.45.elf staging_dir/target-aarch64_generic_musl/image/rk3568_bl31_v1.44.elf
+          ls -la staging_dir/target-aarch64_generic_musl/image/
+
+      - name: Build firmware
+        run: |
+          df -hT
+          echo "使用 ${{ github.event.inputs.threads || '4' }} 线程编译"
+          make -j${{ github.event.inputs.threads || '4' }} || make -j1 V=s
+          df -hT
+
+      - name: Generate build info
+        run: |
+          echo "Build completed at: $(date)" > build_info.txt
+          echo "Device: ${{ env.DEVICE }}" >> build_info.txt
+          echo "Commit: $(git rev-parse HEAD)" >> build_info.txt
+          echo "Commit message: $(git log -1 --format='%s')" >> build_info.txt
+          ls -la bin/targets/rockchip/armv8/
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-${{ env.DEVICE }}-firmware
+          path: |
+            bin/targets/rockchip/armv8/**/*.img.gz
+            bin/targets/rockchip/armv8/**/*.tar.gz
+            build_info.txt
+          retention-days: 14
+          compression-level: 9
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DEVICE }}-build-logs
+          path: |
+            logs/
+            .config*
+          retention-days: 7
