@@ -118,9 +118,15 @@ jobs:
         df -hT
         cd $OPENWRT_PATH
         make defconfig
-        # 绂佺敤 rust锛堢鐩樼┖闂翠笉瓒充細瀵艰嚧缂栬瘧澶辫触锛?        sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
+        # 绂佺敤鎵€鏈?rust 鐩稿叧鍖咃紙纾佺洏绌洪棿涓嶈冻浼氬鑷寸紪璇戝け璐ワ級
+        # 绂佺敤 rust 鍜?cargo
+        sed -i 's/^CONFIG_PACKAGE_rust=y$/# CONFIG_PACKAGE_rust is not set/' .config
+        sed -i 's/^CONFIG_PACKAGE_cargo=y$/# CONFIG_PACKAGE_cargo is not set/' .config 2>/dev/null || true
+        # 绂佺敤 sing-box 鍜?shadowsocks-rust
         sed -i 's/^CONFIG_PACKAGE_sing-box=y$/# CONFIG_PACKAGE_sing-box is not set/' .config
-        sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust=y$/# CONFIG_PACKAGE_shadowsocks-rust is not set/' .config || true
+        sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust/y/# CONFIG_PACKAGE_shadowsocks-rust/' .config 2>/dev/null || true
+        # 绂佺敤鍏朵粬鍙兘渚濊禆 rust 鐨勫寘
+        sed -i '/^CONFIG.*rust/ s/^/# /' .config 2>/dev/null || true
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
