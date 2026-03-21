@@ -1,0 +1,74 @@
+name: Build G68 Plus Basic Firmware
+
+on:
+  workflow_dispatch:
+
+env:
+  DEVICE: g68-plus-basic
+  CONFIG_FILE: g68_mtk_wifi.config
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          repository: linyueweia/immortalwrt-rk356x-linyuewei
+          fetch-depth: 1
+
+      - name: Clean up disk space
+        run: |
+          df -hT
+          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android
+          sudo rm -rf /opt/hostedtoolcache /root/.cache
+          sudo apt-get clean
+          df -hT
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential clang flex bison g++ gperf cmake ninja-build \
+            libelf-dev libssl-dev zlib1g-dev libgmp-dev libmpc-dev libmpfr-dev \
+            gettext autopoint pkg-config zip unzip python3 python3-pip \
+            rsync time ccache git subversion libncurses-dev uuid-dev libpcap-dev
+          sudo pip3 install pyelftools
+
+      - name: Initialize submodules
+        run: |
+          git submodule update --init --recursive
+
+      - name: Prepare feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Configure
+        run: |
+          cp defconfig/${{ env.CONFIG_FILE }} .config
+          make defconfig
+
+      - name: Download rkbin firmware
+        run: |
+          git clone --depth 1 https://github.com/rockchip-linux/rkbin.git
+          mkdir -p staging_dir/target-aarch64_generic_musl/image
+          cp rkbin/bin/rk35/rk3568_ddr_1560MHz_v1.23.bin staging_dir/target-aarch64_generic_musl/image/rk3568_ddr_1560MHz_v1.21.bin
+          cp rkbin/bin/rk35/rk3568_bl31_v1.45.elf staging_dir/target-aarch64_generic_musl/image/rk3568_bl31_v1.44.elf
+
+      - name: Build firmware
+        run: |
+          df -hT
+          make -j4 || make -j1 V=s
+          df -hT
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-${{ env.DEVICE }}-firmware
+          path: |
+            bin/targets/rockchip/armv8/**/*.img.gz
+            bin/targets/rockchip/armv8/**/*.tar.gz
+          retention-days: 14
