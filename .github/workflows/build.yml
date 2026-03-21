@@ -52,13 +52,17 @@ jobs:
         df -hT
         [ -n "$(docker images -q)" ] && docker rmi $(docker images -q)
         sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android $AGENT_TOOLSDIRECTORY
-        sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
+        sudo rm -rf /usr/local/lib/node_modules /root/.npm /root/.yarn /root/.cache
+        sudo rm -rf /opt/hostedtoolcache /root/.cache/pip
+        sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* snapd* || true
         sudo -E apt-get -y update
         sudo -E apt-get -y install $(curl -fsSL is.gd/depends_ubuntu_2204)
         sudo -E apt-get -y install python3-pyelftools
         sudo -E systemctl daemon-reload
         sudo -E apt-get -y autoremove --purge
         sudo -E apt-get -y clean
+        sudo rm -rf /var/cache/apt/archives/*
+        sudo rm -rf ~/.cache
         sudo timedatectl set-timezone "$TZ"
 
     - name: Clone Source Code
@@ -118,19 +122,10 @@ jobs:
         df -hT
         cd $OPENWRT_PATH
         make defconfig
-        # 禁用 rust 相关包（使用更安全的正则表达式）
-        sed -i 's/^CONFIG_PACKAGE_rust=y$/CONFIG_PACKAGE_rust=n/' .config
-        sed -i 's/^CONFIG_PACKAGE_cargo=y$/CONFIG_PACKAGE_cargo=n/' .config 2>/dev/null || true
-        sed -i 's/^CONFIG_PACKAGE_rust-host=y$/CONFIG_PACKAGE_rust-host=n/' .config 2>/dev/null || true
-        # 禁用 sing-box 和 shadowsocks-rust
+        # 禁用 sing-box 和 shadowsocks-rust（这些依赖 rust 且编译很慢）
         sed -i 's/^CONFIG_PACKAGE_sing-box=y$/CONFIG_PACKAGE_sing-box=n/' .config
         sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust-sslocal=y$/CONFIG_PACKAGE_shadowsocks-rust-sslocal=n/' .config 2>/dev/null || true
         sed -i 's/^CONFIG_PACKAGE_shadowsocks-rust-ssserver=y$/CONFIG_PACKAGE_shadowsocks-rust-ssserver=n/' .config 2>/dev/null || true
-        # 禁用其他可能依赖 rust 的包
-        sed -i '/CONFIG.*rust.*=y/s/=y$/=n/' .config 2>/dev/null || true
-        # 检查是否还有 rust 相关包
-        echo "=== 检查 rust 配置 ==="
-        grep "CONFIG.*rust.*=y" .config | head -3 || echo "没有启用的 rust 包"
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
@@ -155,12 +150,6 @@ jobs:
       run: |
         df -hT
         cd $OPENWRT_PATH
-        # 再次确认 rust 被禁用
-        sed -i 's/^CONFIG_PACKAGE_rust=y$/CONFIG_PACKAGE_rust=n/' .config
-        sed -i 's/^CONFIG_PACKAGE_rust-host=y$/CONFIG_PACKAGE_rust-host=n/' .config
-        # 检查 rust
-        echo "=== 编译前检查 rust ==="
-        grep "CONFIG.*rust.*=y" .config | head -3 || echo "rust 已禁用"
         echo -e "$(nproc) thread compile"
         make -j$(nproc) || make -j1 || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
